@@ -1,0 +1,36 @@
+trigger: none
+pr: none
+
+pool:
+  name: Networking-ContainerNetworking-VMSS
+
+jobs:
+  - job: validate
+    displayName: Validate remediation candidate
+    timeoutInMinutes: 60
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 0
+
+      - bash: |
+          set -euo pipefail
+
+          if [[ "${BUILD_REPOSITORY_NAME}" != "danlai-ms/azure-container-networking" ]]; then
+            echo "Refusing non-canary repository: ${BUILD_REPOSITORY_NAME}" >&2
+            exit 1
+          fi
+
+          if [[ "${BUILD_SOURCEVERSION}" != "${ACN_CANARY_GITHUB_HEAD_SHA}" ]]; then
+            echo "Checked out ${BUILD_SOURCEVERSION}, expected ${ACN_CANARY_GITHUB_HEAD_SHA}" >&2
+            exit 1
+          fi
+
+          echo "Validating GitHub PR ${ACN_CANARY_GITHUB_PR_NUMBER}"
+          echo "Repository: ${ACN_CANARY_GITHUB_REPOSITORY}"
+          echo "Branch: ${BUILD_SOURCEBRANCH}"
+          echo "Head SHA: ${BUILD_SOURCEVERSION}"
+
+          go version
+          go test ./...
+        displayName: Validate exact GitHub revision

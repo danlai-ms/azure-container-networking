@@ -1,5 +1,8 @@
 trigger: none
-pr: none
+pr:
+  branches:
+    include:
+      - master
 
 pool:
   name: Networking-ContainerNetworking-VMSS
@@ -21,16 +24,26 @@ jobs:
             exit 1
           fi
 
-          if [[ "${BUILD_SOURCEVERSION}" != "${ACN_CANARY_GITHUB_HEAD_SHA}" ]]; then
-            echo "Checked out ${BUILD_SOURCEVERSION}, expected ${ACN_CANARY_GITHUB_HEAD_SHA}" >&2
+          PR_HEAD_SHA="${SYSTEM_PULLREQUEST_SOURCECOMMITID:-${ACN_CANARY_GITHUB_HEAD_SHA:-}}"
+          if [[ -z "${PR_HEAD_SHA}" ]]; then
+            echo "Unable to determine the GitHub PR head SHA" >&2
             exit 1
           fi
 
-          echo "Validating GitHub PR ${ACN_CANARY_GITHUB_PR_NUMBER}"
-          echo "Repository: ${ACN_CANARY_GITHUB_REPOSITORY}"
+          if [[ -n "${ACN_CANARY_GITHUB_HEAD_SHA:-}" && "${PR_HEAD_SHA}" != "${ACN_CANARY_GITHUB_HEAD_SHA}" ]]; then
+            echo "PR head ${PR_HEAD_SHA}, expected ${ACN_CANARY_GITHUB_HEAD_SHA}" >&2
+            exit 1
+          fi
+
+          echo "Validating GitHub PR ${SYSTEM_PULLREQUEST_PULLREQUESTNUMBER:-${ACN_CANARY_GITHUB_PR_NUMBER:-unknown}}"
+          echo "Repository: ${BUILD_REPOSITORY_NAME}"
           echo "Branch: ${BUILD_SOURCEBRANCH}"
-          echo "Head SHA: ${BUILD_SOURCEVERSION}"
+          echo "PR head SHA: ${PR_HEAD_SHA}"
+          echo "Checked out revision: ${BUILD_SOURCEVERSION}"
 
           go version
           go test ./...
         displayName: Validate exact GitHub revision
+        env:
+          SYSTEM_PULLREQUEST_PULLREQUESTNUMBER: $(System.PullRequest.PullRequestNumber)
+          SYSTEM_PULLREQUEST_SOURCECOMMITID: $(System.PullRequest.SourceCommitId)

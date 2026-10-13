@@ -42,7 +42,37 @@ jobs:
           echo "Checked out revision: ${BUILD_SOURCEVERSION}"
 
           go version
-          go test ./...
+
+          git fetch origin master --quiet
+          mapfile -t CHANGED_FILES < <(git diff --name-only origin/master...HEAD)
+          if [[ "${#CHANGED_FILES[@]}" -eq 0 ]]; then
+            echo "No changed files found" >&2
+            exit 1
+          fi
+
+          declare -A MODULES=()
+          for path in "${CHANGED_FILES[@]}"; do
+            case "${path}" in
+              go.mod|go.sum)
+                MODULES["."]=1
+                ;;
+              */go.mod|*/go.sum)
+                MODULES["$(dirname "${path}")"]=1
+                ;;
+              *)
+                echo "Unexpected changed path: ${path}" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          for module in "${!MODULES[@]}"; do
+            echo "Testing module ${module}"
+            (
+              cd "${module}"
+              go test ./...
+            )
+          done
         displayName: Validate exact GitHub revision
         env:
           SYSTEM_PULLREQUEST_PULLREQUESTNUMBER: $(System.PullRequest.PullRequestNumber)

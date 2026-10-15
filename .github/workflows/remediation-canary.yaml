@@ -1,0 +1,148 @@
+name: ACN Remediation Canary
+
+on:
+  pull_request:
+    branches:
+      - sre-agent-e2e-base
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    name: Validate remediation scope
+    runs-on: ubuntu-latest
+    outputs:
+      modules: ${{ steps.modules.outputs.modules }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate branch and changed paths
+        id: modules
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$BASE_REF" == "sre-agent-e2e-base" ]]
+          [[ "$HEAD_REF" == sre-agent-e2e/* ]]
+          git diff --name-only "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/changed-files"
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+          import re
+
+          changed = [
+              line.strip()
+              for line in pathlib.Path(
+                  os.environ["RUNNER_TEMP"], "changed-files"
+              ).read_text(encoding="utf-8").splitlines()
+              if line.strip()
+          ]
+          if not changed:
+              raise SystemExit("remediation pull request contains no file changes")
+
+          allowed = re.compile(r"^(?:.*/)?go\.(?:mod|sum)$")
+          rejected = [path for path in changed if not allowed.fullmatch(path)]
+          if rejected:
+              raise SystemExit(
+                  "remediation pull request contains unsupported paths: "
+                  + ", ".join(rejected)
+              )
+
+          modules = sorted(
+              {
+                  pathlib.PurePosixPath(path).parent.as_posix()
+                  for path in changed
+              }
+          )
+          modules = ["." if module == "." else module for module in modules]
+          with pathlib.Path(os.environ["GITHUB_OUTPUT"]).open(
+              "a", encoding="utf-8"
+          ) as output:
+              output.write(f"modules={json.dumps(modules)}\n")
+          PY
+
+  validate:
+    name: Validate module (${{ matrix.module }})
+    needs: detect
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: ${{ fromJSON(needs.detect.outputs.modules) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          cache: false
+          go-version-file: ${{ matrix.module == '.' && 'go.mod' || format('{0}/go.mod', matrix.module) }}
+
+      - name: Install system dependencies
+        if: matrix.module == '.' || matrix.module == 'azure-iptables-monitor' || matrix.module == 'bpf-prog/ipv6-hp-bpf'
+        run: sudo apt-get update -y && sudo apt-get install -y iptables ipset iproute2
+
+      - name: Build BPF library
+        if: matrix.module == '.' || matrix.module == 'azure-iptables-monitor' || matrix.module == 'bpf-prog/ipv6-hp-bpf'
+        run: make bpf-lib
+
+      - name: Generate code
+        if: matrix.module == '.' || matrix.module == 'azure-iptables-monitor' || matrix.module == 'bpf-prog/ipv6-hp-bpf'
+        working-directory: ${{ matrix.module }}
+        run: go generate ./...
+
+      - name: Verify module tidiness
+        working-directory: ${{ matrix.module }}
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: Run module tests
+        working-directory: ${{ matrix.module }}
+        run: go test -timeout 30m ./...
+
+      - name: Run govulncheck
+        uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
+        with:
+          go-version-file: ${{ matrix.module == '.' && 'go.mod' || format('{0}/go.mod', matrix.module) }}
+          work-dir: ${{ matrix.module }}
+          go-package: ./...
+          repo-checkout: false
+
+  required-gate:
+    name: ACN Remediation ADO Canary
+    if: always()
+    needs:
+      - detect
+      - validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all remediation validation
+        env:
+          DETECT_RESULT: ${{ needs.detect.result }}
+          VALIDATE_RESULT: ${{ needs.validate.result }}
+        run: |
+          set -euo pipefail
+          [[ "$DETECT_RESULT" == "success" ]]
+          [[ "$VALIDATE_RESULT" == "success" ]]

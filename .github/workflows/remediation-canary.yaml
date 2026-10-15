@@ -3,7 +3,7 @@ name: ACN Remediation Canary
 on:
   pull_request:
     branches:
-      - sre-agent-e2e-base
+      - sre-agent-e2e-base-v2
     types:
       - opened
       - reopened
@@ -39,8 +39,8 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          [[ "$BASE_REF" == "sre-agent-e2e-base" ]]
-          [[ "$HEAD_REF" == sre-agent-e2e/* ]]
+          [[ "$BASE_REF" == "sre-agent-e2e-base-v2" ]]
+          [[ "$HEAD_REF" == sre-agent-e2e-v2/* ]]
           git diff --name-only "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/changed-files"
           python - <<'PY'
           import json
@@ -120,7 +120,14 @@ jobs:
 
       - name: Run module tests
         working-directory: ${{ matrix.module }}
-        run: go test -timeout 30m ./...
+        env:
+          MODULE: ${{ matrix.module }}
+        run: |
+          if [[ "$MODULE" == "." ]]; then
+            sudo -E env "PATH=$PATH" go test -timeout 30m ./...
+          else
+            go test -timeout 30m ./...
+          fi
 
       - name: Run govulncheck
         uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0

@@ -96,6 +96,34 @@ ADO lifecycle integration. The highest-priority design question is how a public
 ACN workflow securely calls the internal BumpBump candidate generator without
 publishing internal source or distributing broad credentials.
 
+## Runtime findings
+
+- `gh aw run --ref sre-agent-gh-aw-eval` could not discover the workflow
+  because dispatchable workflows must already exist on the repository's default
+  branch. An isolated branch is sufficient for compilation/review but not for a
+  real `workflow_dispatch` run in the fork.
+- `gh aw trial` supports the safe evaluation path:
+  1. create a temporary private host repository;
+  2. clone the public ACN fork into it;
+  3. disable unrelated workflows;
+  4. install and compile this workflow;
+  5. execute it;
+  6. delete the host repository.
+- The trial plan was verified with `--dry-run --yes`; no repository or workflow
+  run was created.
+- A real trial was intentionally not started because no approved deterministic
+  BumpBump candidate service/artifact source exists yet. With an empty
+  `candidate_path`, the workflow is designed to emit `noop`.
+
+## Next evaluation steps
+
+1. Decide whether a private trial run using the Copilot engine is approved.
+2. Define the private candidate transport: OIDC-authenticated MCP is preferred.
+3. Run a no-candidate trial and verify `noop`.
+4. Run with one deterministic candidate and verify one draft PR safe output.
+5. Add a separate check-completion workflow and compare it with the existing
+   deterministic reconciler/auto-merge tool.
+
 ## Decision gate
 
 Do not select gh-aw as the production runtime until it proves:

@@ -4,6 +4,7 @@ on:
   pull_request:
     branches-ignore:
       - sre-agent-e2e-base-v4
+      - sre-agent-e2e-base-v5
     types:
       - opened
       - reopened

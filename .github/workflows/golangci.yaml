@@ -6,6 +6,7 @@ on:
       - sre-agent-e2e-base-v4
       - sre-agent-e2e-base-v5
       - sre-platform-canary-base
+      - sre-platform-canary-base-v2
     types:
       - opened
       - reopened

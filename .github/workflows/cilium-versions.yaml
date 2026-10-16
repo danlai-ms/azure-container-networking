@@ -2,6 +2,8 @@ name: 'Cilium Image Versions'
 on:
   workflow_dispatch:
   pull_request:
+    branches-ignore:
+      - sre-platform-canary-base-v2
     types:
       - opened
       - reopened

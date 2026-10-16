@@ -11,6 +11,7 @@ on:
       - sre-platform-canary-base-v2
       - sre-platform-canary-base-v3
       - sre-platform-canary-base-v4
+      - sre-platform-canary-base-v5
     types:
       - opened
       - reopened

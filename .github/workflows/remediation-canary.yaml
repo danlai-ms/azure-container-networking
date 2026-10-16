@@ -3,7 +3,7 @@ name: ACN Remediation Canary
 on:
   pull_request:
     branches:
-      - sre-agent-e2e-base-v5
+      - sre-platform-canary-base
     types:
       - opened
       - reopened
@@ -39,8 +39,8 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          [[ "$BASE_REF" == "sre-agent-e2e-base-v5" ]]
-          [[ "$HEAD_REF" == sre-agent-e2e-v5/* ]]
+          [[ "$BASE_REF" == "sre-platform-canary-base" ]]
+          [[ "$HEAD_REF" == sre-platform/* ]]
           git diff --name-only "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/changed-files"
           python - <<'PY'
           import json
